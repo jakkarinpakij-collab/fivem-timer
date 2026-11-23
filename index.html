@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ตัวนับเวลาหลายจุด</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1f2328;--mut:#6b7280;--line:#e3e1da;--ok:#1a7f4b;--run:#1d4ed8;--done:#b42318}
+@media (prefers-color-scheme:dark){:root{--bg:#16181c;--card:#1f2228;--ink:#eceef1;--mut:#9aa1ad;--line:#2f333b;--ok:#4ade80;--run:#7aa2ff;--done:#ff7b72}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Noto Sans Thai",sans-serif;padding:16px}
+.wrap{max-width:720px;margin:0 auto}
+h1{font-size:20px;margin:0 0 12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+button,input{font:inherit;color:inherit}
+button{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+button:hover{border-color:var(--mut)}
+button.pri{background:var(--run);border-color:var(--run);color:#fff}
+input{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px}
+input.min{width:64px;text-align:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.t{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.t.run{border-color:var(--run)}
+.t.done{border-color:var(--done);animation:pulse 1s infinite}
+@keyframes pulse{50%{background:color-mix(in srgb,var(--done) 12%,var(--card))}}
+.name{border:none;background:transparent;font-weight:600;padding:2px 0;width:100%}
+.time{font-size:34px;font-variant-numeric:tabular-nums;font-weight:600;text-align:center}
+.t.run .time{color:var(--run)}.t.done .time{color:var(--done)}
+.row{display:flex;gap:6px;align-items:center;justify-content:space-between}
+.row button{flex:1;padding:6px}
+.set{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:14px}
+.x{flex:0 0 auto!important;color:var(--mut)}
+.hint{color:var(--mut);font-size:13px;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ตัวนับเวลาหลายจุด</h1>
+  <div class="bar">
+    <button class="pri" id="addBtn">+ เพิ่มจุด</button>
+    <button id="startAll">เริ่มทั้งหมด</button>
+    <button id="resetAll">รีเซ็ตทั้งหมด</button>
+    <label class="set">ค่าเริ่มต้น <input class="min" id="defMin" type="number" min="1" value="10"> นาที</label>
+    <button id="soundBtn">🔔 เสียง: เปิด</button>
+  </div>
+  <div class="grid" id="grid"></div>
+  <p class="hint">เวลานับจากเวลาจริง จึงไม่เพี้ยนแม้สลับแท็บหรือปิดจอชั่วคราว แก้ชื่อและจำนวนนาทีของแต่ละจุดได้เลย</p>
+</div>
+<script>
+var KEY="multi-timers-v1", timers=[], sound=true, ctx=null;
+function load(){try{var s=JSON.parse(localStorage.getItem(KEY));if(s&&s.timers){timers=s.timers;sound=s.sound!==false;document.getElementById("defMin").value=s.def||10}}catch(e){}
+  if(!timers.length){for(var i=1;i<=5;i++)timers.push(mk("จุด "+i,10))}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({timers:timers,sound:sound,def:+document.getElementById("defMin").value||10}))}catch(e){}}
+var uid=0;
+function mk(n,m){return{id:Date.now()+"-"+(uid++),name:n,mins:m,end:0,beeped:false}}
+function fmt(ms){var s=Math.max(0,Math.ceil(ms/1000)),m=Math.floor(s/60);s=s%60;return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")}
+function beep(){if(!sound)return;try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();[0,0.25,0.5].forEach(function(d){var o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=880;g.gain.value=0.2;o.connect(g);g.connect(ctx.destination);o.start(ctx.currentTime+d);o.stop(ctx.currentTime+d+0.15)})}catch(e){}}
+function start(t){t.end=Date.now()+t.mins*60000;t.beeped=false;save()}
+function reset(t){t.end=0;t.beeped=false;save()}
+function render(){var g=document.getElementById("grid");g.innerHTML="";
+  timers.forEach(function(t){var d=document.createElement("div");d.className="t";d.id="t"+t.id;
+    d.innerHTML='<div class="row"><input class="name" value=""><button class="x" title="ลบ">✕</button></div>'+
+    '<div class="time"></div>'+
+    '<div class="row"><button class="go"></button><button class="rs">รีเซ็ต</button></div>'+
+    '<label class="set">ตั้งไว้ <input class="min" type="number" min="1"> นาที</label>';
+    var nm=d.querySelector(".name");nm.value=t.name;nm.oninput=function(){t.name=nm.value;save()};
+    var mi=d.querySelector(".min");mi.value=t.mins;mi.onchange=function(){t.mins=Math.max(1,+mi.value||1);if(!t.end)tick();save()};
+    d.querySelector(".x").onclick=function(){timers=timers.filter(function(x){return x!==t});save();render()};
+    d.querySelector(".go").onclick=function(){start(t);tick()};
+    d.querySelector(".rs").onclick=function(){reset(t);tick()};
+    g.appendChild(d)});tick()}
+function tick(){var now=Date.now();timers.forEach(function(t){var d=document.getElementById("t"+t.id);if(!d)return;
+  var left=t.end?t.end-now:t.mins*60000,done=t.end&&left<=0;
+  d.className="t"+(done?" done":t.end?" run":"");
+  d.querySelector(".time").textContent=done?"ครบแล้ว!":fmt(left);
+  d.querySelector(".go").textContent=t.end?"เริ่มใหม่":"เริ่ม";
+  if(done&&!t.beeped){t.beeped=true;beep()}})}
+document.getElementById("addBtn").onclick=function(){var m=+document.getElementById("defMin").value||10;timers.push(mk("จุด "+(timers.length+1),m));save();render()};
+document.getElementById("startAll").onclick=function(){timers.forEach(start);tick()};
+document.getElementById("resetAll").onclick=function(){timers.forEach(reset);tick()};
+document.getElementById("defMin").onchange=save;
+var sb=document.getElementById("soundBtn");
+sb.onclick=function(){sound=!sound;sb.textContent="🔔 เสียง: "+(sound?"เปิด":"ปิด");if(sound)beep();save()};
+load();sb.textContent="🔔 เสียง: "+(sound?"เปิด":"ปิด");render();setInterval(tick,500);
+</script>
+</body>
+</html>
