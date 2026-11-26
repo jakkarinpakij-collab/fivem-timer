@@ -66,6 +66,7 @@ input,textarea{background:var(--inbg);border:1px solid var(--line);border-radius
   <button id="editBtn">✏️ แก้ไขจุด: ปิด</button>
   <button id="themeBtn">🌓 ธีม: สว่าง</button>
   <button id="soundBtn">🔔 เสียง: เปิด</button>
+  <button id="notifBtn">🖥️ แจ้งเตือนบนจอ: ปิด</button>
   <button id="fitBtn">⤢ พอดีจอ</button>
   <button id="dataBtn">💾 ข้อมูล</button>
   <button id="imgBtn">🗺️ เปลี่ยนรูปแผนที่</button>
@@ -278,7 +279,7 @@ function tick(){
   points.forEach(function(p){
     p.timers.forEach(function(t){if(t.end&&!t.beeped){var l=t.end-Date.now();
       if(l<=0){t.beeped=true;store.save()}
-      else if(l<=60000){t.beeped=true;store.save();beep();hint("เหลือ 1 นาที: "+p.name+" / "+t.name);setTimeout(function(){hint("")},3500)}}});
+      else if(l<=60000){t.beeped=true;store.save();beep();notify(p,t);hint("เหลือ 1 นาที: "+p.name+" / "+t.name);setTimeout(function(){hint("")},3500)}}});
     updMarker(p);
   });
   if(selId){
@@ -299,9 +300,24 @@ try{var tv=localStorage.getItem(TKEY);if(tv==="dark"||tv==="light")theme=tv}catc
 function applyTheme(){document.documentElement.setAttribute("data-theme",theme);themeBtn.textContent="🌓 ธีม: "+(theme==="dark"?"มืด":"สว่าง")}
 themeBtn.onclick=function(){theme=theme==="dark"?"light":"dark";try{localStorage.setItem(TKEY,theme)}catch(e){}applyTheme()};
 applyTheme();
-var editBtn=document.getElementById("editBtn"),soundBtn=document.getElementById("soundBtn");
+var editBtn=document.getElementById("editBtn"),soundBtn=document.getElementById("soundBtn"),notifBtn=document.getElementById("notifBtn"),NKEY="ciment-map-notif",notif=false;
+try{notif=localStorage.getItem(NKEY)==="1"&&("Notification" in window)&&Notification.permission==="granted"}catch(e){}
+function notify(p,t,title){
+  if(!notif)return;
+  try{if(Notification.permission==="granted")new Notification(title||"เหลือ 1 นาที",{body:p.name+" / "+t.name,tag:"t-"+t.id})}catch(e){}
+}
+notifBtn.onclick=function(){
+  if(notif){notif=false;try{localStorage.setItem(NKEY,"0")}catch(e){}labels();return}
+  var fired=false;function ok(){if(fired)return;fired=true;notif=true;try{localStorage.setItem(NKEY,"1")}catch(e){}labels();notify({name:"แผนที่กองปูน"},{id:"test",name:"จะแจ้งเตือนตอนเหลือ 1 นาที"},"เปิดการแจ้งเตือนแล้ว")}
+  function msg(t){hint(t);setTimeout(function(){hint("")},4500)}
+  if(!("Notification" in window)){msg("เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือนบนจอ");return}
+  if(Notification.permission==="granted"){ok();return}
+  if(Notification.permission==="denied"){msg("การแจ้งเตือนถูกบล็อกไว้ กดไอคอนกุญแจข้างช่องที่อยู่เว็บ แล้วอนุญาตการแจ้งเตือน");return}
+  try{var r=Notification.requestPermission(function(x){if(x==="granted")ok();else msg("ไม่ได้รับอนุญาตให้แจ้งเตือน")});
+    if(r&&r.then)r.then(function(x){if(x==="granted")ok();else msg("ไม่ได้รับอนุญาตให้แจ้งเตือน")})}catch(e){msg("เปิดการแจ้งเตือนไม่ได้ในหน้านี้")}
+};
 function labels(){editBtn.textContent="✏️ แก้ไขจุด: "+(edit?"เปิด (คลิกแผนที่เพื่อวางจุด)":"ปิด");editBtn.className=edit?"on":"";
-  soundBtn.textContent="🔔 เสียง: "+(sound?"เปิด":"ปิด");view.classList.toggle("edit",edit)}
+  soundBtn.textContent="🔔 เสียง: "+(sound?"เปิด":"ปิด");notifBtn.textContent="🖥️ แจ้งเตือนบนจอ: "+(notif?"เปิด":"ปิด");notifBtn.className=notif?"on":"";view.classList.toggle("edit",edit)}
 editBtn.onclick=function(){edit=!edit;labels()};
 soundBtn.onclick=function(){sound=!sound;labels();store.save();if(sound)beep()};
 document.getElementById("fitBtn").onclick=fit;
