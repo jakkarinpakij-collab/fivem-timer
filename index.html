@@ -23,6 +23,7 @@ html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;m
 .mk.sel .dot{outline:3px solid #fde047}
 .mk .bd{position:absolute;right:-6px;top:-8px;background:#111;color:#fff;border-radius:9px;font:600 10px/1 system-ui;padding:3px 5px;border:1px solid #fff}
 .mk.sh .dot{border-radius:9px}
+.mk .dn{position:absolute;left:-7px;top:-8px;background:var(--done);color:#fff;border-radius:9px;font:700 10px/1 system-ui;padding:3px 5px;border:1px solid #fff;display:none}
 .note{padding:0 12px 12px;color:var(--mut);font-size:12px}
 @keyframes pulse{50%{transform:scale(1.18)}}
 #top{position:absolute;left:10px;top:10px;right:10px;display:flex;flex-wrap:wrap;gap:6px;z-index:5;pointer-events:none}
@@ -207,7 +208,7 @@ function renderMarkers(){
   Object.keys(mkEls).forEach(function(k){mkEls[k].remove()});mkEls={};
   points.forEach(function(p){
     var m=el("div","mk");
-    m.appendChild(el("div","dot","--:--"));m.appendChild(el("div","bd",""));
+    m.appendChild(el("div","dot","--:--"));m.appendChild(el("div","bd",""));m.appendChild(el("div","dn","✓"));
     m.addEventListener("pointerdown",function(e){e.stopPropagation()});
     m.addEventListener("click",function(e){e.stopPropagation();openPop(p.id)});
     mlayer.appendChild(m);mkEls[p.id]=m;
@@ -216,16 +217,18 @@ function renderMarkers(){
 }
 function updMarker(p){
   var m=mkEls[p.id];if(!m)return;
-  var run=p.timers.filter(function(t){return t.end&&!isDone(t)}),done=p.timers.filter(isDone),warn=p.timers.filter(isWarn);
-  var dot=m.querySelector(".dot"),bd=m.querySelector(".bd");
+  var run=p.timers.filter(function(t){return t.end&&!isDone(t)}),done=p.timers.filter(isDone),warn=run.filter(isWarn);
+  var dot=m.querySelector(".dot"),bd=m.querySelector(".bd"),dn=m.querySelector(".dn");
   var txt;
-  if(done.length)txt="ครบ!";
-  else if(run.length)txt=fmt(Math.min.apply(null,run.map(left)));
+  if(run.length)txt=fmt(Math.min.apply(null,run.map(left)));
+  else if(done.length)txt="ครบ!";
   else txt=p.timers.length?fmt(dur(p.timers[0])*1000):"--:--";
   dot.textContent=txt;
-  bd.textContent=p.timers.length>1?(run.length+done.length)+"/"+p.timers.length:"";
+  bd.textContent=run.length+"/"+p.timers.length;
   bd.style.display=p.timers.length>1?"block":"none";
-  m.className="mk"+(done.length?" done":warn.length?" warn":run.length?" run":"")+(p.shared?" sh":"")+(selId===p.id?" sel":"");
+  dn.textContent=done.length>1?"✓"+done.length:"✓";
+  dn.style.display=(run.length&&done.length)?"block":"none";
+  m.className="mk"+(run.length?(warn.length?" warn":" run"):(done.length?" done":""))+(p.shared?" sh":"")+(selId===p.id?" sel":"");
 }
 
 /* ---------- การ์ด popup ---------- */
@@ -244,7 +247,9 @@ function renderPop(){
     var tm=el("div","tm","--:--");r1.appendChild(tn);r1.appendChild(tm);
     var r2=el("div","r2"),go=el("button","go","เริ่ม"),rs=el("button","","รีเซ็ต"),mn=el("input","mn"),sc=el("input","sc");
     mn.type="number";mn.min="0";mn.value=t.mins;sc.type="number";sc.min="0";sc.max="59";sc.value=t.sec||0;
-    function chg(){var d=normDur(mn.value,sc.value);t.mins=d.mins;t.sec=d.sec;mn.value=d.mins;sc.value=d.sec;store.save();tick()}
+    function chg(){var m=Math.max(0,Math.floor(+mn.value||0)),sv=Math.max(0,Math.floor(+sc.value||0)),tot=m*60+sv;
+      if(tot<1){hint("ต้องตั้งเวลาอย่างน้อย 1 วินาที");setTimeout(function(){hint("")},1800);return}
+      var d={mins:Math.floor(tot/60),sec:tot%60};t.mins=d.mins;t.sec=d.sec;mn.value=d.mins;sc.value=d.sec;store.save();tick()}
     mn.onchange=chg;sc.onchange=chg;
     go.onclick=function(){t.end=Date.now()+dur(t)*1000;t.beeped=dur(t)<=60;store.save();tick()};
     rs.onclick=function(){t.end=0;t.beeped=false;store.save();tick()};
