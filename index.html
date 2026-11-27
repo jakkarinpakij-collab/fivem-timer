@@ -265,7 +265,7 @@ function renderPop(){
     var r1=el("div","r1"),tn=el("input","nm");tn.value=t.name;tn.disabled=!!p.shared;tn.oninput=function(){t.name=tn.value;store.save()};
     var tm=el("div","tm","--:--");r1.appendChild(tn);r1.appendChild(tm);
     var r2=el("div","r2"),go=el("button","go","เริ่ม"),pb=el("button","pb","หยุด"),rs=el("button","","รีเซ็ต"),ti=el("input","ti");
-    ti.type="text";ti.value=fmtIn(t);ti.placeholder="10.30";ti.setAttribute("autocomplete","off");ti.setAttribute("inputmode","text");
+    ti.type="text";ti.value=fmtIn(t);ti.placeholder="กรอกเวลาจร้าา";ti.setAttribute("autocomplete","off");ti.setAttribute("inputmode","text");
     function bad(msg){hint(msg);setTimeout(function(){hint("")},2600);ti.value=fmtIn(t)}
     function commit(startNow){
       var d=parseTime(ti.value);
