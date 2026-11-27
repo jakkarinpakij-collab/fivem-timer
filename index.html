@@ -290,7 +290,6 @@ function renderPop(){
       p.timers=p.timers.filter(function(z){return z!==t});store.save();renderPop();tick();placePop()};
     r2.appendChild(go);r2.appendChild(pb);r2.appendChild(rs);if(!p.shared)r2.appendChild(del);
     var r3=el("div","r3");r3.appendChild(el("span","","เวลา"));r3.appendChild(ti);r3.appendChild(el("span","","นาที.วินาที"));
-    r3.appendChild(el("small","","เช่น 10.30 = 10 นาที 30 วินาที (พิมพ์ 10 = 10 นาที) กด Enter เพื่อเริ่มนับ"));
     r.appendChild(r1);r.appendChild(r2);r.appendChild(r3);body.appendChild(r);
   });
   pop.appendChild(body);
