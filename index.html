@@ -95,7 +95,7 @@ button:disabled{opacity:.4;cursor:default}
   <p>👥 <b>ห้องร่วมกัน</b>: ทุกคนที่ใช้รหัสห้องเดียวกันจะเห็นจุดและเวลาเดียวกัน และแก้ไขได้ทุกคน ใครรู้รหัสห้องก็เข้าได้ จึงควรส่งให้เฉพาะเพื่อนที่ไว้ใจ<br>🙋 <b>คนเดียว</b>: เก็บในเครื่องนี้ ไม่ซิงก์กับใคร</p>
   <input id="rIn" placeholder="รหัสห้อง (อังกฤษ/ตัวเลข 4-64 ตัว)" autocomplete="off">
   <div class="row"><button id="rJoin" class="pri">เข้าห้อง</button></div>
-  <div class="row"><button id="rSolo">ใช้คนเดียว (ในเครื่อง)</button><button id="rMig" style="display:none">ย้ายจุดตัวเองเข้ามาในห้อง</button><button id="rClose">ปิด</button></div>
+  <div class="row"><button id="rSolo">ออกจากห้อง</button><button id="rMig" style="display:none">ย้ายจุดตัวเองเข้ามาในห้อง</button><button id="rClose">ปิด</button></div>
   <p id="rMsg"></p>
 </div></div>
 <script src="config.js"></script>
@@ -498,6 +498,7 @@ function joinRoom(code){
 function openRoomDlg(){
   rIn.value=room||"";rMsg.textContent="";
   document.getElementById("rMig").style.display=(online&&localPoints.length&&room)?"":"none";
+  document.getElementById("rSolo").style.display=online?"":"none";
   rdlg.style.display="flex";
 }
 roomBtn.onclick=openRoomDlg;
