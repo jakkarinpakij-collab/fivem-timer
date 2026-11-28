@@ -65,6 +65,9 @@ button:disabled{opacity:.4;cursor:default}
 #dlg .row,#rdlg .row{display:flex;gap:8px;flex-wrap:wrap}
 #dlg p,#rdlg p{margin:0;color:var(--mut);font-size:13px}
 #rdlg input{width:100%}
+.mk .mu{position:absolute;right:-7px;bottom:-8px;background:#fff;border:1px solid #fff;border-radius:9px;font:10px/1 system-ui;padding:3px 4px;box-shadow:0 1px 4px rgba(0,0,0,.4);display:none}
+#pop .mute{border-radius:50%;width:30px;height:30px;padding:0;background:var(--card);border:1px solid var(--line)}
+#pop .mute.off{background:var(--donebg);border-color:var(--done)}
 </style>
 </head>
 <body>
@@ -107,6 +110,9 @@ var view=document.getElementById("view"), world=document.getElementById("world")
 var S={s:1,tx:0,ty:0}, W=795, H=761, fitS=1;
 var points=[], sound=true, edit=false, selId=null, uid=0, ctx=null, online=false, off=0;
 function nowMs(){return Date.now()+off}
+var muted={};try{muted=JSON.parse(localStorage.getItem("ciment-map-mute")||"{}")||{}}catch(e){muted={}}
+function isMuted(id){return !!muted[id]}
+function setMuted(id,v){if(v)muted[id]=1;else delete muted[id];try{localStorage.setItem("ciment-map-mute",JSON.stringify(muted))}catch(e){}}
 
 /* ---------- storage (แยกไว้ เปลี่ยนเป็นออนไลน์ทีหลังได้) ---------- */
 var tstate={};
@@ -238,7 +244,7 @@ function renderMarkers(){
   Object.keys(mkEls).forEach(function(k){mkEls[k].remove()});mkEls={};
   points.forEach(function(p){
     var m=el("div","mk");
-    m.appendChild(el("div","dot","--:--"));m.appendChild(el("div","bd",""));m.appendChild(el("div","dn","✓"));m.appendChild(el("div","ps","⏸"));
+    m.appendChild(el("div","dot","--:--"));m.appendChild(el("div","bd",""));m.appendChild(el("div","dn","✓"));m.appendChild(el("div","ps","⏸"));m.appendChild(el("div","mu","🔕"));
     m.addEventListener("pointerdown",function(e){e.stopPropagation()});
     m.addEventListener("click",function(e){e.stopPropagation();openPop(p.id)});
     mlayer.appendChild(m);mkEls[p.id]=m;
@@ -260,6 +266,7 @@ function updMarker(p){
   dn.textContent=done.length>1?"✓"+done.length:"✓";
   dn.style.display=(run.length&&done.length)?"block":"none";
   ps.style.display=(pau.length&&(run.length||done.length))?"block":"none";
+  m.querySelector(".mu").style.display=isMuted(p.id)?"block":"none";
   m.className="mk"+(run.length?(warn.length?" warn":" run"):(done.length?" done":(pau.length?" pause":"")))+(p.shared?" sh":"")+(selId===p.id?" sel":"");
 }
 
@@ -271,7 +278,10 @@ function renderPop(){
   pop.innerHTML="";pop.style.display="block";
   var hd=el("div","hd"),nm=el("input");nm.value=p.name;nm.placeholder="ชื่อจุด";
   nm.disabled=!!p.shared;nm.oninput=function(){p.name=nm.value;if(online)later("p"+p.id,function(){pushPoint(p)});else store.save()};
-  var x=el("button","x","✕");x.onclick=closePop;hd.appendChild(nm);hd.appendChild(x);pop.appendChild(hd);
+  var x=el("button","x","✕");x.onclick=closePop;var mb=el("button","mute");
+  function mbUpd(){var m=isMuted(p.id);mb.textContent=m?"🔕":"🔔";mb.title=m?"ปิดเสียงจุดนี้อยู่ (กดเพื่อเปิด)":"เปิดเสียงจุดนี้ (กดเพื่อปิด)";mb.className="mute"+(m?" off":"")}
+  mbUpd();mb.onclick=function(){setMuted(p.id,!isMuted(p.id));mbUpd();updMarker(p);hint(isMuted(p.id)?"ปิดแจ้งเตือนจุดนี้แล้ว":"เปิดแจ้งเตือนจุดนี้แล้ว");setTimeout(function(){hint("")},1800)};
+  hd.appendChild(nm);hd.appendChild(mb);hd.appendChild(x);pop.appendChild(hd);
   var body=el("div","bd2");
   p.timers.forEach(function(t){
     var r=el("div","tr");r.dataset.tid=t.id;
@@ -330,7 +340,7 @@ function tick(){
   points.forEach(function(p){
     p.timers.forEach(function(t){if(t.end&&!t.beeped){var l=t.end-nowMs();
       if(l<=0){t.beeped=true;store.save()}
-      else if(l<=60000){t.beeped=true;store.save();beep();notify(p,t);hint("เหลือ 1 นาที: "+p.name+" / "+t.name);setTimeout(function(){hint("")},3500)}}});
+      else if(l<=60000){t.beeped=true;store.save();if(!isMuted(p.id)){beep();notify(p,t);hint("เหลือ 1 นาที: "+p.name+" / "+t.name);setTimeout(function(){hint("")},3500)}}}});
     updMarker(p);
   });
   if(selId){
