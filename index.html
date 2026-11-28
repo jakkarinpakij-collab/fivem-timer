@@ -452,6 +452,7 @@ function applyRemote(pRows,tRows){
     if(ch)t.beeped=t.end>0&&dur(t)<=60;
     (by[r.point_id]=by[r.point_id]||[]).push(t)});
   var before=sig();
+  
   points=pRows.map(function(r){
     var p=op[r.id]||{id:r.id,timers:[]};
     p.name=r.name;p.x=r.x;p.y=r.y;p.shared=false;p.timers=by[r.id]||[];return p});
@@ -506,7 +507,7 @@ document.getElementById("rClose").onclick=function(){rdlg.style.display="none"};
 rIn.addEventListener("keydown",function(e){if(e.key==="Enter")document.getElementById("rJoin").click()});
 document.getElementById("rJoin").onclick=function(){
   var c=rIn.value.trim();
-  if(!validRoom(c)){rMsg.textContent="รหัสห้องต้องเป็นตัวอักษรอังกฤษหรือตัวเลข 4-64 ตัว";return}
+  if(!validRoom(c)){rMsg.textContent="ใส่รหัสห้อง";return}
   if(!online){try{localStorage.setItem("ciment-map-room",c);localStorage.setItem("ciment-map-mode","room")}catch(e){}location.hash=c;location.reload();return}
   joinRoom(c).then(function(){rdlg.style.display="none";document.getElementById("rMig").style.display="none"});
 };
@@ -558,7 +559,7 @@ if(hasCfg&&(hashRoom||mode==="room")){
   withSupabase(function(ok){if(ok)startOnline();else{hint("โหลดระบบออนไลน์ไม่ได้ ใช้โหมดคนเดียวแทน");setTimeout(function(){hint("")},4000);startOffline()}});
 }else{
   startOffline();
-  if(hasCfg){roomBtn.style.display="";roomBtn.textContent="🙋 คนเดียว (กดเพื่อเลือกโหมด)";document.getElementById("rMig").style.display="none"}
+  if(hasCfg){roomBtn.style.display="";roomBtn.textContent="เข้าร่วมห้อง";document.getElementById("rMig").style.display="none"}
 }
 })();
 </script>
