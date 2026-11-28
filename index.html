@@ -59,11 +59,12 @@ button:disabled{opacity:.4;cursor:default}
 .tr .del{margin-left:auto;color:var(--mut);padding:5px 8px}
 #pop .ft{display:flex;gap:8px;padding:0 10px 10px}
 #pop .ft button{flex:1}
-#dlg{position:absolute;inset:0;background:rgba(0,0,0,.6);z-index:20;display:none;align-items:center;justify-content:center;padding:12px}
-#dlg .box{background:var(--card);border-radius:14px;padding:14px;width:min(520px,100%);display:flex;flex-direction:column;gap:8px}
+#dlg,#rdlg{position:absolute;inset:0;background:rgba(0,0,0,.6);z-index:20;display:none;align-items:center;justify-content:center;padding:12px}
+#dlg .box,#rdlg .box{background:var(--card);border-radius:14px;padding:14px;width:min(520px,100%);display:flex;flex-direction:column;gap:8px}
 #dlg textarea{width:100%;height:200px;font:12px/1.3 ui-monospace,monospace}
-#dlg .row{display:flex;gap:8px;flex-wrap:wrap}
-#dlg p{margin:0;color:var(--mut);font-size:13px}
+#dlg .row,#rdlg .row{display:flex;gap:8px;flex-wrap:wrap}
+#dlg p,#rdlg p{margin:0;color:var(--mut);font-size:13px}
+#rdlg input{width:100%}
 </style>
 </head>
 <body>
@@ -73,6 +74,7 @@ button:disabled{opacity:.4;cursor:default}
   <button id="themeBtn">🌓 ธีม: สว่าง</button>
   <button id="soundBtn">🔔 เสียง: เปิด</button>
   <button id="notifBtn">🖥️ แจ้งเตือนบนจอ: ปิด</button>
+  <button id="roomBtn" style="display:none">👥 ห้อง</button>
   <button id="fitBtn">⤢ พอดีจอ</button>
   <button id="dataBtn">💾 ข้อมูล</button>
   <button id="imgBtn">🗺️ เปลี่ยนรูปแผนที่</button>
@@ -88,23 +90,34 @@ button:disabled{opacity:.4;cursor:default}
   <div class="row"><button id="dCopy">คัดลอก</button><button id="dImp" class="pri">นำเข้า (แทนจุดส่วนตัว)</button><button id="dClose">ปิด</button></div>
   <p id="dMsg"></p>
 </div></div>
+<div id="rdlg"><div class="box">
+  <b>เลือกโหมด</b>
+  <p>👥 <b>ห้องร่วมกัน</b>: ทุกคนที่ใช้รหัสห้องเดียวกันจะเห็นจุดและเวลาเดียวกัน และแก้ไขได้ทุกคน ใครรู้รหัสห้องก็เข้าได้ จึงควรส่งให้เฉพาะเพื่อนที่ไว้ใจ<br>🙋 <b>คนเดียว</b>: เก็บในเครื่องนี้ ไม่ซิงก์กับใคร</p>
+  <input id="rIn" placeholder="รหัสห้อง (อังกฤษ/ตัวเลข 4-64 ตัว)" autocomplete="off">
+  <div class="row"><button id="rJoin" class="pri">เข้าห้อง</button></div>
+  <div class="row"><button id="rSolo">ใช้คนเดียว (ในเครื่อง)</button><button id="rMig" style="display:none">ย้ายจุดตัวเองเข้ามาในห้อง</button><button id="rClose">ปิด</button></div>
+  <p id="rMsg"></p>
+</div></div>
+<script src="config.js"></script>
 <script>
 (function(){
+var CFG=window.APP_CONFIG||{};
 var KEY="ciment-map-v1", MAPSRC="map.jpg";
 var view=document.getElementById("view"), world=document.getElementById("world"), img=document.getElementById("map"), pop=document.getElementById("pop");
 var S={s:1,tx:0,ty:0}, W=795, H=761, fitS=1;
-var points=[], sound=true, edit=false, selId=null, uid=0, ctx=null;
+var points=[], sound=true, edit=false, selId=null, uid=0, ctx=null, online=false, off=0;
+function nowMs(){return Date.now()+off}
 
 /* ---------- storage (แยกไว้ เปลี่ยนเป็นออนไลน์ทีหลังได้) ---------- */
 var tstate={};
 var store={
   load:function(){try{var d=JSON.parse(localStorage.getItem(KEY));if(d&&d.points){points=d.points;tstate=d.tstate||{};sound=d.sound!==false;return true}}catch(e){}return false},
-  save:function(){try{
+  save:function(){if(online){try{localStorage.setItem("ciment-map-sound",sound?"1":"0")}catch(e){}return}try{
     var loc=points.filter(function(p){return !p.shared});
     points.forEach(function(p){if(p.shared)p.timers.forEach(function(t){tstate[t.id]={mins:t.mins,sec:t.sec||0,end:t.end,beeped:t.beeped,pausedLeft:t.pausedLeft||0}})});
     localStorage.setItem(KEY,JSON.stringify({points:loc,tstate:tstate,sound:sound}))}catch(e){}}
 };
-function nid(){return Date.now().toString(36)+"-"+(uid++)}
+function nid(){return (+new Date()).toString(36)+"-"+Math.random().toString(36).slice(2,7)+(uid++)}
 function normDur(m,s){var tot=Math.max(0,Math.floor(+m||0))*60+Math.max(0,Math.floor(+s||0));if(tot<1)tot=1;return{mins:Math.floor(tot/60),sec:tot%60}}
 function parseDur(o){var tot=Math.max(0,Math.floor(+o.mins||0))*60+Math.max(0,Math.floor(+o.sec||0));if(tot<1)tot=600;return{mins:Math.floor(tot/60),sec:tot%60}}
 function dur(t){return (t.mins||0)*60+(t.sec||0)}
@@ -130,7 +143,7 @@ function buildShared(arr){
 /* ---------- ช่วยเหลือ ---------- */
 function fmt(ms){var s=Math.max(0,Math.ceil(ms/1000)),m=Math.floor(s/60);s=s%60;return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")}
 function isPaused(t){return !t.end&&(t.pausedLeft||0)>0}
-function left(t){return t.end?t.end-Date.now():(isPaused(t)?t.pausedLeft:dur(t)*1000)}
+function left(t){return t.end?t.end-nowMs():(isPaused(t)?t.pausedLeft:dur(t)*1000)}
 function fmtIn(t){return (t.mins||0)+"."+String(t.sec||0).padStart(2,"0")}
 function parseTime(str){
   str=String(str||"").trim().toLowerCase().replace(/\s+/g,"").replace(/,/g,".");
@@ -142,8 +155,8 @@ function parseTime(str){
   if(tot===null||tot>86400)return null;
   return tot;
 }
-function isWarn(t){var l=t.end?t.end-Date.now():0;return t.end&&l>0&&l<=60000}
-function isDone(t){return t.end&&t.end-Date.now()<=0}
+function isWarn(t){var l=t.end?t.end-nowMs():0;return t.end&&l>0&&l<=60000}
+function isDone(t){return t.end&&t.end-nowMs()<=0}
 function beep(){if(!sound)return;try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();[0,.25,.5].forEach(function(d){var o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=880;g.gain.value=.2;o.connect(g);g.connect(ctx.destination);o.start(ctx.currentTime+d);o.stop(ctx.currentTime+d+.15)})}catch(e){}}
 function hint(t){var h=document.getElementById("hint");h.textContent=t;h.style.display=t?"block":"none"}
 function el(tag,cls,txt){var e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
@@ -201,7 +214,7 @@ function endPtr(e){
     var r=view.getBoundingClientRect();
     var wx=(e.clientX-r.left-S.tx)/S.s,wy=(e.clientY-r.top-S.ty)/S.s;
     if(edit&&wx>=0&&wy>=0&&wx<=W&&wy<=H){
-      var p=mkPoint(wx/W,wy/H,"กองปูน "+(points.length+1));points.push(p);store.save();renderMarkers();openPop(p.id);
+      var p=mkPoint(wx/W,wy/H,"กองปูน "+(points.length+1));points.push(p);pushPoint(p);pushTimer(p,p.timers[0]);renderMarkers();openPop(p.id);
     }else closePop();
   }
 }
@@ -257,15 +270,15 @@ function renderPop(){
   var p=find(selId);if(!p){closePop();return}
   pop.innerHTML="";pop.style.display="block";
   var hd=el("div","hd"),nm=el("input");nm.value=p.name;nm.placeholder="ชื่อจุด";
-  nm.disabled=!!p.shared;nm.oninput=function(){p.name=nm.value;store.save()};
+  nm.disabled=!!p.shared;nm.oninput=function(){p.name=nm.value;if(online)later("p"+p.id,function(){pushPoint(p)});else store.save()};
   var x=el("button","x","✕");x.onclick=closePop;hd.appendChild(nm);hd.appendChild(x);pop.appendChild(hd);
   var body=el("div","bd2");
   p.timers.forEach(function(t){
     var r=el("div","tr");r.dataset.tid=t.id;
-    var r1=el("div","r1"),tn=el("input","nm");tn.value=t.name;tn.disabled=!!p.shared;tn.oninput=function(){t.name=tn.value;store.save()};
+    var r1=el("div","r1"),tn=el("input","nm");tn.value=t.name;tn.disabled=!!p.shared;tn.oninput=function(){t.name=tn.value;if(online)later("t"+t.id,function(){pushTimer(p,t)});else store.save()};
     var tm=el("div","tm","--:--");r1.appendChild(tn);r1.appendChild(tm);
     var r2=el("div","r2"),go=el("button","go","เริ่ม"),pb=el("button","pb","หยุด"),rs=el("button","","รีเซ็ต"),ti=el("input","ti");
-    ti.type="text";ti.value=fmtIn(t);ti.placeholder="กรอกสิจ๊ะ";ti.setAttribute("autocomplete","off");ti.setAttribute("inputmode","text");
+    ti.type="text";ti.value=fmtIn(t);ti.placeholder="10.30";ti.setAttribute("autocomplete","off");ti.setAttribute("inputmode","text");
     function bad(msg){hint(msg);setTimeout(function(){hint("")},2600);ti.value=fmtIn(t)}
     function commit(startNow){
       var d=parseTime(ti.value);
@@ -273,31 +286,32 @@ function renderPop(){
       if(d<1){bad("ต้องตั้งเวลาอย่างน้อย 1 วินาที");return}
       var changed=d!==dur(t);
       t.mins=Math.floor(d/60);t.sec=d%60;ti.value=fmtIn(t);
-      if(startNow){t.end=Date.now()+d*1000;t.pausedLeft=0;t.beeped=d<=60}
+      if(startNow){t.end=nowMs()+d*1000;t.pausedLeft=0;t.beeped=d<=60}
       else if(changed)t.pausedLeft=0;
-      store.save();tick();
+      pushTimer(p,t);tick();
     }
     ti.onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();commit(true)}};
     ti.onchange=function(){commit(false)};
-    go.onclick=function(){t.end=Date.now()+dur(t)*1000;t.pausedLeft=0;t.beeped=dur(t)<=60;store.save();tick()};
+    go.onclick=function(){t.end=nowMs()+dur(t)*1000;t.pausedLeft=0;t.beeped=dur(t)<=60;pushTimer(p,t);tick()};
     pb.onclick=function(){
-      if(t.end&&!isDone(t)){t.pausedLeft=Math.max(1,t.end-Date.now());t.end=0}
-      else if(isPaused(t)){t.end=Date.now()+t.pausedLeft;t.pausedLeft=0}
-      store.save();tick()};
-    rs.onclick=function(){t.end=0;t.pausedLeft=0;t.beeped=false;store.save();tick()};
+      if(t.end&&!isDone(t)){t.pausedLeft=Math.max(1,t.end-nowMs());t.end=0}
+      else if(isPaused(t)){t.end=nowMs()+t.pausedLeft;t.pausedLeft=0}
+      pushTimer(p,t);tick()};
+    rs.onclick=function(){t.end=0;t.pausedLeft=0;t.beeped=false;pushTimer(p,t);tick()};
     var del=el("button","del","✕");del.title="ลบตัวนับนี้";
     del.onclick=function(){if(p.timers.length<=1){hint("ต้องมีตัวนับอย่างน้อย 1 ตัว");setTimeout(function(){hint("")},1800);return}
-      p.timers=p.timers.filter(function(z){return z!==t});store.save();renderPop();tick();placePop()};
+      p.timers=p.timers.filter(function(z){return z!==t});dropTimer(t);renderPop();tick();placePop()};
     r2.appendChild(go);r2.appendChild(pb);r2.appendChild(rs);if(!p.shared)r2.appendChild(del);
     var r3=el("div","r3");r3.appendChild(el("span","","เวลา"));r3.appendChild(ti);r3.appendChild(el("span","","นาที.วินาที"));
+    r3.appendChild(el("small","","สู้ๆ! น้าาาาา"));
     r.appendChild(r1);r.appendChild(r2);r.appendChild(r3);body.appendChild(r);
   });
   pop.appendChild(body);
   var ft=el("div","ft"),add=el("button","","+ เพิ่มตัวนับ"),rm=el("button","","ลบจุดนี้");
-  add.onclick=function(){var lt=p.timers[p.timers.length-1];p.timers.push(mkTimer("กองที่ "+(p.timers.length+1),lt.mins,lt.sec));store.save();renderPop();tick();placePop()};
+  add.onclick=function(){var lt=p.timers[p.timers.length-1],nt=mkTimer("กองที่ "+(p.timers.length+1),lt.mins,lt.sec);p.timers.push(nt);pushTimer(p,nt);renderPop();tick();placePop()};
   var armed=false;
   rm.onclick=function(){if(!armed){armed=true;rm.textContent="กดอีกครั้งเพื่อลบ";rm.style.color="#b42318";setTimeout(function(){armed=false;rm.textContent="ลบจุดนี้";rm.style.color=""},2500);return}
-    points=points.filter(function(z){return z!==p});store.save();closePop();renderMarkers()};
+    points=points.filter(function(z){return z!==p});dropPoint(p);closePop();renderMarkers()};
   if(p.shared){pop.appendChild(el("div","note","จุดส่วนกลาง: แก้ชื่อหรือลบไม่ได้ แต่ปรับเวลาและกดนับเวลาได้"))}else{ft.appendChild(add);ft.appendChild(rm);pop.appendChild(ft)}
   tick();
 }
@@ -314,7 +328,7 @@ function placePop(){
 /* ---------- นาฬิกา ---------- */
 function tick(){
   points.forEach(function(p){
-    p.timers.forEach(function(t){if(t.end&&!t.beeped){var l=t.end-Date.now();
+    p.timers.forEach(function(t){if(t.end&&!t.beeped){var l=t.end-nowMs();
       if(l<=0){t.beeped=true;store.save()}
       else if(l<=60000){t.beeped=true;store.save();beep();notify(p,t);hint("เหลือ 1 นาที: "+p.name+" / "+t.name);setTimeout(function(){hint("")},3500)}}});
     updMarker(p);
@@ -376,7 +390,9 @@ document.getElementById("dImp").onclick=function(){
     d=d.filter(function(p){return !sid[p.id]}).map(function(p){
       return{id:String(p.id||nid()),name:String(p.name||"กองปูน"),x:p.x,y:p.y,shared:false,
         timers:p.timers.map(function(t){return{id:String(t.id||nid()),name:String(t.name||"กอง"),mins:parseDur(t).mins,sec:parseDur(t).sec,end:0,beeped:false}})}});
-    points=points.filter(function(p){return p.shared}).concat(d);store.save();closePop();renderMarkers();dMsg.textContent="นำเข้าแล้ว "+d.length+" จุด (ข้ามจุดที่ซ้ำกับจุดส่วนกลาง)";
+    if(online){var ids={};d.forEach(function(p){ids[p.id]=1});points=points.filter(function(p){return !ids[p.id]}).concat(d);d.forEach(function(p){pushPoint(p);p.timers.forEach(function(t){pushTimer(p,t)})})}
+    else{points=points.filter(function(p){return p.shared}).concat(d);store.save()}
+    closePop();renderMarkers();dMsg.textContent="นำเข้าแล้ว "+d.length+" จุด (ข้ามจุดที่ซ้ำกับจุดส่วนกลาง)";
   }catch(e){dMsg.textContent="ข้อมูลไม่ถูกต้อง"}
 };
 
@@ -395,14 +411,154 @@ function relayout(){
 window.addEventListener("resize",relayout);
 if(window.ResizeObserver)new ResizeObserver(relayout).observe(view);
 var hadStore=store.load();
-fetch("points.json",{cache:"no-store"}).then(function(r){return r.ok?r.json():[]}).catch(function(){return[]}).then(function(arr){
-  buildShared(arr);
-  if(!hadStore&&!points.length){
-    points=[mkPoint(.52,.5,"กองปูน ตัวอย่าง 1"),mkPoint(.3,.42,"กองปูน ตัวอย่าง 2"),mkPoint(.66,.62,"กองปูน ตัวอย่าง 3")];
-    points[0].timers.push(mkTimer("กองที่ 2",15));
+
+/* ---------- ออนไลน์ (Supabase) ---------- */
+var sb=null,room="",CID=Math.random().toString(36).slice(2,10),localPoints=[],rtOk=false,rtCh=null,reloadT=null,pend=0,UP={onConflict:"room,id"},deb={};
+var roomBtn=document.getElementById("roomBtn"),rdlg=document.getElementById("rdlg"),rIn=document.getElementById("rIn"),rMsg=document.getElementById("rMsg");
+function validRoom(c){return /^[A-Za-z0-9_-]{4,64}$/.test(c||"")}
+function randRoom(){var a=new Uint8Array(12);try{crypto.getRandomValues(a)}catch(e){for(var i=0;i<12;i++)a[i]=Math.floor(Math.random()*256)}return Array.prototype.map.call(a,function(x){return (x%36).toString(36)}).join("")}
+function later(key,fn){clearTimeout(deb[key]);deb[key]=setTimeout(fn,450)}
+function dbErr(r){pend=Math.max(0,pend-1);if(r&&r.error){hint("บันทึกขึ้นเซิร์ฟเวอร์ไม่สำเร็จ ลองใหม่อีกครั้ง");setTimeout(function(){hint("")},3000)}}
+function pRow(p){return{room:room,id:p.id,name:p.name||"",x:p.x,y:p.y,by:CID}}
+function tRow(p,t){return{room:room,id:t.id,point_id:p.id,name:t.name||"",mins:t.mins||0,sec:t.sec||0,end_ms:Math.round(t.end||0),paused_left:Math.round(t.pausedLeft||0),ord:Math.max(0,p.timers.indexOf(t)),by:CID}}
+function pushPoint(p){if(!online){store.save();return}if(!room)return;pend++;sb.from("cement_points").upsert(pRow(p),UP).then(dbErr,function(){dbErr({error:1})})}
+function pushTimer(p,t){if(!online){store.save();return}if(!room)return;pend++;sb.from("cement_timers").upsert(tRow(p,t),UP).then(dbErr,function(){dbErr({error:1})})}
+function dropTimer(t){if(!online){store.save();return}if(!room)return;pend++;sb.from("cement_timers").delete().eq("room",room).eq("id",t.id).then(dbErr,function(){dbErr({error:1})})}
+function dropPoint(p){if(!online){store.save();return}if(!room)return;pend++;sb.from("cement_timers").delete().eq("room",room).eq("point_id",p.id).then(function(){return sb.from("cement_points").delete().eq("room",room).eq("id",p.id)}).then(dbErr,function(){dbErr({error:1})})}
+function syncClock(){
+  var t0=Date.now();
+  return Promise.resolve(sb.rpc("server_now")).then(function(r){
+    if(r&&!r.error&&typeof r.data==="number"){off=Math.round(r.data-(t0+Date.now())/2)}
+  }).catch(function(){});
+}
+function sig(){return points.map(function(p){return p.id+":"+p.timers.map(function(t){return t.id}).join(",")}).join("|")}
+function syncPop(){
+  if(!selId)return;var p=find(selId);if(!p||pop.style.display==="none")return;
+  var hd=pop.querySelector(".hd input");if(hd&&document.activeElement!==hd)hd.value=p.name;
+  p.timers.forEach(function(t){var r=pop.querySelector('.tr[data-tid="'+t.id+'"]');if(!r)return;
+    var n=r.querySelector(".nm"),ti=r.querySelector(".ti");
+    if(n&&document.activeElement!==n)n.value=t.name;
+    if(ti&&document.activeElement!==ti)ti.value=fmtIn(t)});
+}
+function applyRemote(pRows,tRows){
+  var op={},ot={};
+  points.forEach(function(p){op[p.id]=p;p.timers.forEach(function(t){ot[t.id]=t})});
+  var by={};
+  tRows.slice().sort(function(a,b){return ((a.ord||0)-(b.ord||0))||(a.id<b.id?-1:1)}).forEach(function(r){
+    var t=ot[r.id],ne=+r.end_ms||0,np=+r.paused_left||0,isNew=!t;
+    if(isNew)t={id:r.id,beeped:false};
+    var ch=isNew||t.end!==ne||(t.pausedLeft||0)!==np;
+    t.name=r.name;t.mins=r.mins;t.sec=r.sec||0;t.end=ne;t.pausedLeft=np;
+    if(ch)t.beeped=t.end>0&&dur(t)<=60;
+    (by[r.point_id]=by[r.point_id]||[]).push(t)});
+  var before=sig();
+  points=pRows.map(function(r){
+    var p=op[r.id]||{id:r.id,timers:[]};
+    p.name=r.name;p.x=r.x;p.y=r.y;p.shared=false;p.timers=by[r.id]||[];return p});
+  if(sig()!==before){if(selId&&!find(selId))closePop();renderMarkers();if(selId)renderPop();placePop()}
+  else{placeMarkers();syncPop();tick()}
+}
+function loadRoom(){
+  if(!online||!room)return Promise.resolve();
+  if(pend>0){clearTimeout(reloadT);reloadT=setTimeout(loadRoom,400);return Promise.resolve()}
+  var r0=room;
+  return Promise.all([sb.from("cement_points").select("*").eq("room",r0),sb.from("cement_timers").select("*").eq("room",r0)]).then(function(a){
+    if(r0!==room||pend>0)return;
+    if(!a||!a[0]||!a[1]||a[0].error||a[1].error)return;
+    applyRemote(a[0].data||[],a[1].data||[]);
+  }).catch(function(){});
+}
+function scheduleLoad(){clearTimeout(reloadT);reloadT=setTimeout(loadRoom,150)}
+function updRoomBtn(){
+  roomBtn.style.display=online?"":"none";
+  roomBtn.textContent="👥 ห้อง: "+(room?(room.length>12?room.slice(0,12)+"…":room)+(rtOk?" ●":" ○"):"ยังไม่ได้เข้า");
+}
+function subscribe(){
+  if(rtCh){try{sb.removeChannel(rtCh)}catch(e){}rtCh=null}
+  rtOk=false;updRoomBtn();
+  function h(pl){
+    var row=(pl&&(pl.eventType==="DELETE"?pl.old:pl.new))||{};
+    if(row.room&&row.room!==room)return;
+    if(row.by&&row.by===CID)return;
+    scheduleLoad();
   }
-  store.save();labels();img.src=MAPSRC;
-});
+  try{
+    rtCh=sb.channel("cement-"+CID)
+      .on("postgres_changes",{event:"*",schema:"public",table:"cement_points"},h)
+      .on("postgres_changes",{event:"*",schema:"public",table:"cement_timers"},h)
+      .subscribe(function(st){rtOk=(st==="SUBSCRIBED");updRoomBtn();if(rtOk)loadRoom()});
+  }catch(e){}
+}
+function joinRoom(code){
+  room=code;try{localStorage.setItem("ciment-map-room",code);localStorage.setItem("ciment-map-mode","room")}catch(e){}
+  try{history.replaceState(null,"","#"+code)}catch(e){}
+  closePop();points=[];renderMarkers();updRoomBtn();
+  return syncClock().then(loadRoom).then(subscribe);
+}
+function openRoomDlg(){
+  rIn.value=room||"";rMsg.textContent="";
+  document.getElementById("rMig").style.display=(online&&localPoints.length&&room)?"":"none";
+  rdlg.style.display="flex";
+}
+roomBtn.onclick=openRoomDlg;
+document.getElementById("rClose").onclick=function(){rdlg.style.display="none"};
+rIn.addEventListener("keydown",function(e){if(e.key==="Enter")document.getElementById("rJoin").click()});
+document.getElementById("rJoin").onclick=function(){
+  var c=rIn.value.trim();
+  if(!validRoom(c)){rMsg.textContent="รหัสห้องต้องเป็นตัวอักษรอังกฤษหรือตัวเลข 4-64 ตัว";return}
+  if(!online){try{localStorage.setItem("ciment-map-room",c);localStorage.setItem("ciment-map-mode","room")}catch(e){}location.hash=c;location.reload();return}
+  joinRoom(c).then(function(){rdlg.style.display="none";document.getElementById("rMig").style.display="none"});
+};
+document.getElementById("rSolo").onclick=function(){
+  try{localStorage.setItem("ciment-map-mode","solo")}catch(e){}
+  try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}
+  location.reload();
+};
+document.getElementById("rMig").onclick=function(){
+  if(!room||!localPoints.length)return;
+  var n=0;localPoints.forEach(function(lp){if(!lp||!Array.isArray(lp.timers))return;n++;pushPoint(lp);lp.timers.forEach(function(t){pushTimer(lp,t)})});
+  rMsg.textContent="ย้ายแล้ว "+n+" จุด";localPoints=[];document.getElementById("rMig").style.display="none";
+  setTimeout(loadRoom,800);
+};
+function withSupabase(cb){
+  if(window.supabase&&window.supabase.createClient)return cb(true);
+  var sc=document.createElement("script");sc.src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+  sc.onload=function(){cb(!!(window.supabase&&window.supabase.createClient))};sc.onerror=function(){cb(false)};
+  document.head.appendChild(sc);
+}
+function startOnline(){
+  try{sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseKey)}catch(e){hint("ตั้งค่าออนไลน์ผิดพลาด ใช้โหมดออฟไลน์แทน");setTimeout(function(){hint("")},4000);startOffline();return}
+  online=true;localPoints=points;points=[];tstate={};
+  try{var sv=localStorage.getItem("ciment-map-sound");if(sv!==null)sound=sv==="1"}catch(e){}
+  document.getElementById("dImp").textContent="นำเข้า (เพิ่ม/อัปเดตเข้าห้อง)";
+  var h=(location.hash||"").replace(/^#/,""),saved="";
+  try{saved=localStorage.getItem("ciment-map-room")||""}catch(e){}
+  var code=validRoom(h)?h:(validRoom(saved)?saved:"");
+  labels();updRoomBtn();img.src=MAPSRC;
+  if(code)joinRoom(code);else openRoomDlg();
+  setInterval(function(){loadRoom()},60000);
+  setInterval(syncClock,300000);
+  document.addEventListener("visibilitychange",function(){if(!document.hidden){syncClock().then(loadRoom)}});
+}
+function startOffline(){
+  fetch("points.json",{cache:"no-store"}).then(function(r){return r.ok?r.json():[]}).catch(function(){return[]}).then(function(arr){
+    buildShared(arr);
+    if(!hadStore&&!points.length){
+      points=[mkPoint(.52,.5,"กองปูน ตัวอย่าง 1"),mkPoint(.3,.42,"กองปูน ตัวอย่าง 2"),mkPoint(.66,.62,"กองปูน ตัวอย่าง 3")];
+      points[0].timers.push(mkTimer("กองที่ 2",15));
+    }
+    store.save();labels();img.src=MAPSRC;
+  });
+}
+var hasCfg=!!(CFG.supabaseUrl&&CFG.supabaseKey),mode="";
+try{mode=localStorage.getItem("ciment-map-mode")||""}catch(e){}
+var hashRoom=validRoom((location.hash||"").replace(/^#/,""));
+if(hasCfg&&(hashRoom||mode==="room")){
+  withSupabase(function(ok){if(ok)startOnline();else{hint("โหลดระบบออนไลน์ไม่ได้ ใช้โหมดคนเดียวแทน");setTimeout(function(){hint("")},4000);startOffline()}});
+}else{
+  startOffline();
+  if(hasCfg){roomBtn.style.display="";roomBtn.textContent="🙋 คนเดียว (กดเพื่อเลือกโหมด)";document.getElementById("rMig").style.display="none"}
+}
 })();
 </script>
 </body>
